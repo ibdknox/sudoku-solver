@@ -100,16 +100,51 @@
 (defn get-cells [puzzle locs]
   (zipmap locs (map (partial get puzzle) locs)))
 
-(defn solve [string]
-  (let [puzzle (puzzle-from-string string)
-        solved (filter #(= 1 (count (val %))) puzzle)]
-    (loop [given solved
+(defn puzzle-solved? [puzzle]
+  "Determines if there are any sets with possibilities greater than 1"
+  (every? #(= 1 (count (val %))) puzzle))
+
+(defn get-sets-by-size
+  ([puzzle size] (filter #(= size (count (val %))) puzzle))
+  ([puzzle smin smax] (filter #(let [cur-size (count (val %))]
+                                 (and (<= smin cur-size)
+                                      (>= smax cur-size)))
+                              puzzle)))
+
+(defn has-only-possib? [puzzle loc]
+  (let [related-possib (get-possib puzzle (get-related-cells loc))
+        cur-possib (get puzzle loc)
+        diff (filter #(not (contains? related-possib %)) cur-possib)]
+    (println loc " : " cur-possib " : " related-possib " : " diff)
+    (if (= (count diff) 1)
+      (first diff)
+      nil)))
+
+(defn solve-known-cells [puzzle cells]
+    (loop [given cells
            new-puz puzzle]
       (if-not (seq given)
-        (do
-          (print-board new-puz)
-          new-puz)
+        new-puz
         (let [cur-entry (first given)
               loc (key cur-entry)
               num-to-remove (first (val cur-entry))]
-          (recur (rest given) (rem-possib new-puz loc num-to-remove)))))))
+          (recur (rest given) (rem-possib new-puz loc num-to-remove))))))
+
+(defn solve [string]
+  (let [puzzle (puzzle-from-string string)
+        known (get-sets-by-size puzzle 1)
+        initial-pass (solve-known-cells puzzle known)]
+    (loop [puz initial-pass
+           cells (get-sets-by-size puz 2 4)
+           passes 0]
+      (if (or (puzzle-solved? puz) (empty? cells) (>= passes 1000)) 
+        (do 
+          (print-board puz)
+          puz)
+        (let [cur-cell (first cells)
+              loc (key cur-cell)
+              to-remove (has-only-possib? puz (key cur-cell))
+              updated-puz (if to-remove
+                            (rem-possib puz loc to-remove)
+                            puz)]
+          (recur updated-puz (rest cells) (inc passes)))))))
